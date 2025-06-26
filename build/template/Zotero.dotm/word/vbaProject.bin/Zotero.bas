@@ -284,69 +284,536 @@ Public Sub ZoteroGoToZotero()
     Dim jsonText As String
     jsonText = Mid$(fieldCode, jsonStart, jsonEnd - jsonStart + 1)
     
-    ' Extract item URIs and keys from the JSON text
+    ' Create collections to store citation items and their metadata
     Dim itemKeys As New Collection
-    Dim pos As Long, key As String
-    pos = InStr(1, jsonText, "/items/")
-    Do While pos > 0
-        ' Find start of key and end quote
-        Dim keyStart As Long, keyEnd As Long
-        keyStart = pos + Len("/items/")
-        keyEnd = InStr(keyStart, jsonText, """")
-        If keyEnd = 0 Then keyEnd = InStr(keyStart, jsonText, "}") ' fallback, in case no quote (end of string)
-        key = Mid$(jsonText, keyStart, keyEnd - keyStart)
-        If key <> "" Then
-            On Error Resume Next
-            itemKeys.Add key, key   ' use key as key to avoid duplicates
-            On Error GoTo 0
-        End If
-        pos = InStr(keyEnd + 1, jsonText, "/items/")
-    Loop
+    Dim itemDetails As New Collection
+    Dim displayNames As New Collection
+    Dim groupIDs As New Collection
+    
+    ' Extract citation items from JSON
+    ' Look for the "citationItems" array which contains all cited works
+    Dim citItemsPos As Long
+    citItemsPos = InStr(1, jsonText, """citationItems"":[")
+    If citItemsPos = 0 Then
+        ' If we can't find the citationItems array, try the old extraction method
+        ExtractCitationItemKeysLegacy jsonText, itemKeys, groupIDs
+    Else
+        ' Parse the citation items array to extract keys and metadata
+        ExtractCitationItems jsonText, itemKeys, itemDetails, displayNames, groupIDs
+    End If
     
     If itemKeys.Count = 0 Then
         MsgBox "No Zotero items found in this citation.", vbExclamation, "Zotero"
         Exit Sub
     End If
     
-    ' For each item, check if it's in a group library or personal library
-    ' and construct the appropriate Zotero URI
-    Dim i As Integer
-    For i = 1 To itemKeys.Count
-        key = itemKeys(i)
-        Dim zoteroLink As String
-        Dim groupPos As Long
-        groupPos = InStr(1, jsonText, "/groups/")
+    ' If multiple items, show selection dialog
+    Dim selectedKeys As New Collection
+    If itemKeys.Count > 1 Then
+        Dim selectionResult As Variant
+        selectionResult = ShowItemSelectionDialog(itemKeys, displayNames)
         
-        ' If it's a group library item (contains "/groups/")
-        If groupPos > 0 And InStr(1, jsonText, "/groups/" & key) = 0 Then
-            ' Extract group ID
-            Dim groupStart As Long, groupEnd As Long
-            groupStart = groupPos + Len("/groups/")
-            groupEnd = InStr(groupStart, jsonText, "/")
-            If groupEnd > groupStart Then
-                Dim groupID As String
-                groupID = Mid$(jsonText, groupStart, groupEnd - groupStart)
-                zoteroLink = "zotero://select/groups/" & groupID & "/items/" & key
-            Else
-                ' Default to personal library if group ID can't be extracted
-                zoteroLink = "zotero://select/library/items/" & key
+        ' If user canceled, exit
+        If IsEmpty(selectionResult) Then Exit Sub
+        
+        ' Process selected items
+        Dim selectedIndexes As Variant
+        selectedIndexes = selectionResult
+        
+        ' Convert selected indexes to keys
+        Dim idx As Variant
+        For Each idx In selectedIndexes
+            selectedKeys.Add itemKeys(CInt(idx))
+        Next
+    Else
+        ' Single item - no dialog needed
+        selectedKeys.Add itemKeys(1)
+    End If
+    
+    ' Open the selected items in Zotero
+    If selectedKeys.Count > 0 Then
+        OpenItemsInZotero selectedKeys, groupIDs
+    End If
+End Sub
+
+' Extract keys using the legacy method (direct string search)
+Private Sub ExtractCitationItemKeysLegacy(jsonText As String, ByRef itemKeys As Collection, ByRef groupIDs As Collection)
+    Dim pos As Long, key As String
+    pos = InStr(1, jsonText, "/items/")
+    
+    Do While pos > 0
+        ' Find start of key and end quote
+        Dim keyStart As Long, keyEnd As Long
+        keyStart = pos + Len("/items/")
+        keyEnd = InStr(keyStart, jsonText, """")
+        If keyEnd = 0 Then keyEnd = InStr(keyStart, jsonText, "}") ' fallback, in case no quote
+        key = Mid$(jsonText, keyStart, keyEnd - keyStart)
+        If key <> "" Then
+            On Error Resume Next
+            ' Check if this is a group item
+            Dim groupPos As Long, groupID As String
+            groupPos = InStrRev(jsonText, "/groups/", pos)
+            If groupPos > 0 And pos - groupPos < 30 Then ' Assume group ID is within 30 chars of the item key
+                Dim groupStart As Long, groupEnd As Long
+                groupStart = groupPos + Len("/groups/")
+                groupEnd = InStr(groupStart, jsonText, "/")
+                If groupEnd > groupStart Then
+                    groupID = Mid$(jsonText, groupStart, groupEnd - groupStart)
+                    groupIDs.Add groupID, key
+                End If
             End If
+            ' Add the key to our collection
+            itemKeys.Add key, key ' Use key as key to avoid duplicates
+            On Error GoTo 0
+        End If
+        pos = InStr(keyEnd + 1, jsonText, "/items/")
+    Loop
+End Sub
+
+' Extract citation items with metadata from JSON
+Private Sub ExtractCitationItems(jsonText As String, ByRef itemKeys As Collection, ByRef itemDetails As Collection, _
+                                ByRef displayNames As Collection, ByRef groupIDs As Collection)
+    Dim citItemsStart As Long, citItemsEnd As Long
+    Dim currentPos As Long, itemStart As Long, itemEnd As Long
+    
+    ' Find the citationItems array
+    citItemsStart = InStr(1, jsonText, """citationItems"":[") + Len("""citationItems"":[")
+    citItemsEnd = FindMatchingBracket(jsonText, citItemsStart, "[", "]")
+    
+    If citItemsStart = 0 Or citItemsEnd = 0 Then Exit Sub
+    
+    ' Extract the array content
+    Dim citItemsArray As String
+    citItemsArray = Mid$(jsonText, citItemsStart, citItemsEnd - citItemsStart)
+    
+    ' Process each item object in the array
+    currentPos = 1
+    Do While currentPos < Len(citItemsArray)
+        ' Find start of item object
+        itemStart = InStr(currentPos, citItemsArray, "{")
+        If itemStart = 0 Then Exit Do
+        
+        ' Find end of item object
+        itemEnd = FindMatchingBracket(citItemsArray, itemStart, "{", "}")
+        If itemEnd = 0 Then Exit Do
+        
+        ' Extract the item JSON
+        Dim itemJson As String
+        itemJson = Mid$(citItemsArray, itemStart, itemEnd - itemStart + 1)
+        
+        ' Extract URI, key, and other metadata
+        Dim itemKey As String, displayName As String, groupID As String
+        ExtractItemData itemJson, itemKey, displayName, groupID
+        
+        ' Add to collections if key found
+        If itemKey <> "" Then
+            On Error Resume Next
+            itemKeys.Add itemKey, itemKey
+            itemDetails.Add itemJson, itemKey
+            displayNames.Add displayName, itemKey
+            If groupID <> "" Then
+                groupIDs.Add groupID, itemKey
+            End If
+            On Error GoTo 0
+        End If
+        
+        ' Move to next item
+        currentPos = itemEnd + 1
+    Loop
+End Sub
+
+' Find matching closing bracket
+Private Function FindMatchingBracket(text As String, startPos As Long, openBracket As String, closeBracket As String) As Long
+    Dim depth As Long, i As Long
+    depth = 1
+    
+    For i = startPos + 1 To Len(text)
+        If Mid$(text, i, 1) = openBracket Then
+            depth = depth + 1
+        ElseIf Mid$(text, i, 1) = closeBracket Then
+            depth = depth - 1
+            If depth = 0 Then
+                FindMatchingBracket = i
+                Exit Function
+            End If
+        End If
+    Next i
+    
+    FindMatchingBracket = 0 ' No match found
+End Function
+
+' Extract item data from JSON
+Private Sub ExtractItemData(itemJson As String, ByRef itemKey As String, ByRef displayName As String, ByRef groupID As String)
+    itemKey = ""
+    displayName = ""
+    groupID = ""
+    
+    ' Extract item key from URI
+    Dim uriPos As Long, uriStart As Long, uriEnd As Long
+    uriPos = InStr(1, itemJson, """uri""")
+    If uriPos = 0 Then
+        uriPos = InStr(1, itemJson, """uris""")
+        If uriPos > 0 Then
+            ' Find first URI in the array
+            uriStart = InStr(uriPos, itemJson, "http")
+            If uriStart > 0 Then
+                uriEnd = InStr(uriStart, itemJson, """")
+                If uriEnd > uriStart Then
+                    Dim uri As String
+                    uri = Mid$(itemJson, uriStart, uriEnd - uriStart)
+                    
+                    ' Check for group ID
+                    Dim groupPos As Long
+                    groupPos = InStr(1, uri, "/groups/")
+                    If groupPos > 0 Then
+                        Dim groupStart As Long, groupEnd As Long
+                        groupStart = groupPos + Len("/groups/")
+                        groupEnd = InStr(groupStart, uri, "/")
+                        If groupEnd > groupStart Then
+                            groupID = Mid$(uri, groupStart, groupEnd - groupStart)
+                        End If
+                    End If
+                    
+                    ' Extract key from URI
+                    Dim keyPos As Long
+                    keyPos = InStr(1, uri, "/items/")
+                    If keyPos > 0 Then
+                        itemKey = Mid$(uri, keyPos + Len("/items/"))
+                    End If
+                End If
+            End If
+        End If
+    Else
+        ' Direct URI extraction
+        uriStart = InStr(uriPos, itemJson, "http")
+        If uriStart > 0 Then
+            uriEnd = InStr(uriStart, itemJson, """")
+            If uriEnd > uriStart Then
+                Dim directUri As String
+                directUri = Mid$(itemJson, uriStart, uriEnd - uriStart)
+                
+                ' Check for group
+                Dim directGroupPos As Long
+                directGroupPos = InStr(1, directUri, "/groups/")
+                If directGroupPos > 0 Then
+                    Dim directGroupStart As Long, directGroupEnd As Long
+                    directGroupStart = directGroupPos + Len("/groups/")
+                    directGroupEnd = InStr(directGroupStart, directUri, "/")
+                    If directGroupEnd > directGroupStart Then
+                        groupID = Mid$(directUri, directGroupStart, directGroupEnd - directGroupStart)
+                    End If
+                End If
+                
+                ' Extract key
+                Dim directKeyPos As Long
+                directKeyPos = InStr(1, directUri, "/items/")
+                If directKeyPos > 0 Then
+                    itemKey = Mid$(directUri, directKeyPos + Len("/items/"))
+                End If
+            End If
+        End If
+    End If
+    
+    ' Try to extract title, author, year for display
+    Dim title As String, author As String, year As String
+    
+    ' Extract title
+    Dim titlePos As Long, titleStart As Long, titleEnd As Long
+    titlePos = InStr(1, itemJson, """title""")
+    If titlePos > 0 Then
+        titleStart = InStr(titlePos, itemJson, ":")
+        If titleStart > 0 Then
+            titleStart = InStr(titleStart, itemJson, """")
+            If titleStart > 0 Then
+                titleStart = titleStart + 1
+                titleEnd = InStr(titleStart, itemJson, """")
+                If titleEnd > titleStart Then
+                    title = Mid$(itemJson, titleStart, titleEnd - titleStart)
+                End If
+            End If
+        End If
+    End If
+    
+    ' Extract author (family name of first author)
+    Dim authorPos As Long, authorStart As Long, authorEnd As Long, familyPos As Long
+    authorPos = InStr(1, itemJson, """author""")
+    If authorPos > 0 Then
+        familyPos = InStr(authorPos, itemJson, """family""")
+        If familyPos > 0 Then
+            authorStart = InStr(familyPos, itemJson, ":")
+            If authorStart > 0 Then
+                authorStart = InStr(authorStart, itemJson, """")
+                If authorStart > 0 Then
+                    authorStart = authorStart + 1
+                    authorEnd = InStr(authorStart, itemJson, """")
+                    If authorEnd > authorStart Then
+                        author = Mid$(itemJson, authorStart, authorEnd - authorStart)
+                    End If
+                End If
+            End If
+        End If
+    End If
+    
+    ' Extract year
+    Dim yearPos As Long, issuedPos As Long, dateParts As Long
+    issuedPos = InStr(1, itemJson, """issued""")
+    If issuedPos > 0 Then
+        dateParts = InStr(issuedPos, itemJson, """date-parts""")
+        If dateParts > 0 Then
+            yearPos = InStr(dateParts, itemJson, "[")
+            If yearPos > 0 Then
+                yearPos = InStr(yearPos, itemJson, "[") ' Find nested array
+                If yearPos > 0 Then
+                    yearPos = InStr(yearPos, itemJson, """")
+                    If yearPos > 0 Then
+                        yearPos = yearPos + 1
+                        Dim yearEnd As Long
+                        yearEnd = InStr(yearPos, itemJson, """")
+                        If yearEnd > yearPos Then
+                            year = Mid$(itemJson, yearPos, yearEnd - yearPos)
+                        End If
+                    End If
+                End If
+            End If
+        End If
+    End If
+    
+    ' Build display name
+    If title <> "" Or author <> "" Or year <> "" Then
+        If author <> "" Then
+            displayName = author
+            If year <> "" Then
+                displayName = displayName & " (" & year & ")"
+            End If
+            If title <> "" Then
+                displayName = displayName & " — " & title
+            End If
+        ElseIf title <> "" Then
+            displayName = title
+            If year <> "" Then
+                displayName = displayName & " (" & year & ")"
+            End If
+        ElseIf year <> "" Then
+            displayName = "Item from " & year
+        End If
+    End If
+    
+    ' If no display name could be constructed, use the key
+    If displayName = "" And itemKey <> "" Then
+        displayName = "Item: " & itemKey
+    End If
+End Sub
+
+' Show a dialog for the user to select items
+Private Function ShowItemSelectionDialog(itemKeys As Collection, displayNames As Collection) As Variant
+    ' Create UserForm for selection
+    Dim frmSelItems As Object
+    On Error Resume Next
+    Set frmSelItems = UserForms.Add("frmZoteroSelectItems")
+    
+    If Err.Number <> 0 Then
+        ' UserForm approach failed, fallback to simplified selection approach
+        ShowItemSelectionDialog = SimpleItemSelection(itemKeys, displayNames)
+        Exit Function
+    End If
+    On Error GoTo 0
+    
+    ' Populate the form with items
+    With frmSelItems
+        ' Setup form controls (UserForm would need a ListBox named lstItems)
+        .Caption = "Select items to open in Zotero"
+        
+        ' Add items to the list
+        Dim i As Long
+        For i = 1 To itemKeys.Count
+            .lstItems.AddItem displayNames(i)
+            .lstItems.Selected(i - 1) = True ' Select by default
+        Next i
+        
+        ' Show the form
+        .Show vbModal
+        
+        ' Process results if OK was clicked
+        If .DialogResult = vbOK Then
+            Dim selectedIndexes As New Collection
+            For i = 0 To .lstItems.ListCount - 1
+                If .lstItems.Selected(i) Then
+                    selectedIndexes.Add i + 1 ' Make 1-based
+                End If
+            Next i
+            
+            ShowItemSelectionDialog = selectedIndexes
         Else
-            ' Personal library item
+            ' User canceled
+            ShowItemSelectionDialog = Empty
+        End If
+    End With
+    
+    ' Clean up
+    Unload frmSelItems
+End Function
+
+' Simple item selection when UserForms are not available
+Private Function SimpleItemSelection(itemKeys As Collection, displayNames As Collection) As Variant
+    ' Just display a list to the user and let them choose a number
+    Dim msg As String
+    msg = "Found " & itemKeys.Count & " Zotero items in this citation:" & vbCrLf & vbCrLf
+    
+    Dim i As Long
+    For i = 1 To itemKeys.Count
+        msg = msg & i & ") " & displayNames(i) & vbCrLf
+    Next i
+    
+    msg = msg & vbCrLf & "Enter the numbers to open (separated by commas), or type 'all' for all items."
+    msg = msg & vbCrLf & "Press Cancel to abort."
+    
+    ' Ask user
+    Dim userInput As String
+    userInput = InputBox(msg, "Select Zotero Items", "all")
+    
+    ' Check for cancel
+    If userInput = "" Then
+        SimpleItemSelection = Empty
+        Exit Function
+    End If
+    
+    ' Process selection
+    Dim selectedIndexes As New Collection
+    If LCase(Trim(userInput)) = "all" Then
+        ' All items selected
+        For i = 1 To itemKeys.Count
+            On Error Resume Next
+            selectedIndexes.Add i, CStr(i)
+            On Error GoTo 0
+        Next i
+        
+        ' Debug check - ensure we have items
+        If selectedIndexes.Count = 0 Then
+            MsgBox "Warning: Failed to select all items. Using manual selection.", vbExclamation
+            ' Manually add each item as fallback
+            For i = 1 To itemKeys.Count
+                selectedIndexes.Add i
+            Next i
+        End If
+    Else
+        ' Parse numbers
+        Dim parts As Variant
+        parts = Split(userInput, ",")
+        
+        Dim part As Variant
+        For Each part In parts
+            Dim num As Long
+            num = Val(Trim(part))
+            If num >= 1 And num <= itemKeys.Count Then
+                On Error Resume Next
+                selectedIndexes.Add num, CStr(num)
+                On Error GoTo 0
+            End If
+        Next part
+    End If
+    
+    ' Check if any items were selected
+    If selectedIndexes.Count = 0 Then
+        MsgBox "No valid items were selected. Operation canceled.", vbInformation, "Zotero"
+        SimpleItemSelection = Empty
+    Else
+        SimpleItemSelection = selectedIndexes
+    End If
+End Function
+
+' Open the selected items in Zotero
+Private Sub OpenItemsInZotero(selectedKeys As Collection, groupIDs As Collection)
+    ' Handle both single-item and multi-item cases
+    If selectedKeys.Count = 1 Then
+        ' Single item - simple URI
+        Dim key As String
+        key = selectedKeys(1)
+        
+        Dim zoteroLink As String
+        
+        ' Check if it belongs to a group
+        On Error Resume Next
+        Dim groupID As String
+        groupID = groupIDs(key)
+        On Error GoTo 0
+        
+        If groupID <> "" Then
+            zoteroLink = "zotero://select/groups/" & groupID & "/items/" & key
+        Else
             zoteroLink = "zotero://select/library/items/" & key
         End If
         
-        ' Open the Zotero link using ShellExecute
+        ' Open the URI
         Dim shellObj As Object
         Set shellObj = CreateObject("Shell.Application")
         shellObj.ShellExecute zoteroLink, "", "", "open", 1
-    Next i
-    
-    ' Confirm to user
-    If itemKeys.Count = 1 Then
-        MsgBox "Zotero item opened in Zotero library.", vbInformation, "Zotero"
+        
+        MsgBox "Zotero item opened in Zotero library.", vbInformation, zoteroLink
     Else
-        MsgBox itemKeys.Count & " Zotero items opened in Zotero library.", vbInformation, "Zotero"
+        ' Multiple items - use item list in query parameter
+        ' Group items by library (personal vs. each group)
+        Dim personalItems As String
+        personalItems = ""
+        
+        ' Collections for group items (key = groupID, value = comma-separated keys)
+        Dim groupItems As New Collection
+        
+        Dim i As Integer
+        For i = 1 To selectedKeys.Count
+            key = selectedKeys(i)
+            
+            ' Check if it belongs to a group
+            On Error Resume Next
+            groupID = groupIDs(key)
+            On Error GoTo 0
+            
+            If groupID <> "" Then
+                ' Group item
+                On Error Resume Next
+                Dim groupKeyList As String
+                groupKeyList = groupItems(groupID)
+                
+                If Err.Number <> 0 Then
+                    ' First item for this group
+                    groupItems.Add key, groupID
+                Else
+                    ' Add to existing group items
+                    groupItems.Remove groupID
+                    groupItems.Add groupKeyList & "," & key, groupID
+                End If
+                On Error GoTo 0
+            Else
+                ' Personal library item
+                If personalItems = "" Then
+                    personalItems = key
+                Else
+                    personalItems = personalItems & "," & key
+                End If
+            End If
+        Next i
+        
+        ' Open personal library items
+        If personalItems <> "" Then
+            zoteroLink = "zotero://select/library/items?itemKey=" & personalItems
+            Set shellObj = CreateObject("Shell.Application")
+            shellObj.ShellExecute zoteroLink, "", "", "open", 1
+        End If
+        
+        ' Open group library items
+        If groupItems.Count > 0 Then
+            Dim g As Variant
+            For Each g In groupItems.Keys
+                groupID = g
+                Dim groupKeysList As String
+                groupKeysList = groupItems(groupID)
+                
+                zoteroLink = "zotero://select/groups/" & groupID & "/items?itemKey=" & groupKeysList
+                Set shellObj = CreateObject("Shell.Application")
+                shellObj.ShellExecute zoteroLink, "", "", "open", 1
+            Next g
+        End If
+        
+        MsgBox selectedKeys.Count & " Zotero items opened in Zotero library.", vbInformation, "Zotero"
     End If
 End Sub
 
