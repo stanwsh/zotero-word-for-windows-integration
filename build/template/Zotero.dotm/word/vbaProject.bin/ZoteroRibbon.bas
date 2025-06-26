@@ -47,6 +47,10 @@ Sub ZoteroRibbonRemoveCodes(button As IRibbonControl)
     Call ZoteroRemoveCodes
 End Sub
 
+Sub ZoteroRibbonGoToZotero(button As IRibbonControl)
+    Call ZoteroGoToZotero
+End Sub
+
 Sub ZoteroTabLabel(tb As IRibbonControl, ByRef returnedVal)
     Dim ver As Double
     ver = Val(Application.Version)

@@ -251,3 +251,102 @@ Sub ZoteroCommand(cmd As String, bringToFront As Boolean)
     End If
 End Sub
 
+Public Sub ZoteroGoToZotero()
+    ' Check if the selection is in a valid Zotero citation field
+    If Selection.Fields.Count = 0 Then
+        MsgBox "Please place the cursor inside a Zotero citation to use Go To Zotero.", vbInformation, "Zotero"
+        Exit Sub
+    End If
+
+    Dim zoteroField As Field
+    Set zoteroField = Nothing
+    Dim fld As Field
+    For Each fld In Selection.Fields
+        If InStr(1, fld.Code.Text, "ZOTERO_ITEM") > 0 Then
+            Set zoteroField = fld
+            Exit For
+        End If
+    Next
+
+    If zoteroField Is Nothing Then
+        MsgBox "Please place the cursor in a Zotero citation before using Go To Zotero.", vbExclamation, "Zotero"
+        Exit Sub
+    End If
+
+    ' Get field code text (the JSON)
+    Dim fieldCode As String
+    fieldCode = zoteroField.Code.Text
+    
+    ' The JSON is enclosed in braces; find the JSON content
+    Dim jsonStart As Long, jsonEnd As Long
+    jsonStart = InStr(fieldCode, "{")
+    jsonEnd = InStrRev(fieldCode, "}")
+    Dim jsonText As String
+    jsonText = Mid$(fieldCode, jsonStart, jsonEnd - jsonStart + 1)
+    
+    ' Extract item URIs and keys from the JSON text
+    Dim itemKeys As New Collection
+    Dim pos As Long, key As String
+    pos = InStr(1, jsonText, "/items/")
+    Do While pos > 0
+        ' Find start of key and end quote
+        Dim keyStart As Long, keyEnd As Long
+        keyStart = pos + Len("/items/")
+        keyEnd = InStr(keyStart, jsonText, """")
+        If keyEnd = 0 Then keyEnd = InStr(keyStart, jsonText, "}") ' fallback, in case no quote (end of string)
+        key = Mid$(jsonText, keyStart, keyEnd - keyStart)
+        If key <> "" Then
+            On Error Resume Next
+            itemKeys.Add key, key   ' use key as key to avoid duplicates
+            On Error GoTo 0
+        End If
+        pos = InStr(keyEnd + 1, jsonText, "/items/")
+    Loop
+    
+    If itemKeys.Count = 0 Then
+        MsgBox "No Zotero items found in this citation.", vbExclamation, "Zotero"
+        Exit Sub
+    End If
+    
+    ' For each item, check if it's in a group library or personal library
+    ' and construct the appropriate Zotero URI
+    Dim i As Integer
+    For i = 1 To itemKeys.Count
+        key = itemKeys(i)
+        Dim zoteroLink As String
+        Dim groupPos As Long
+        groupPos = InStr(1, jsonText, "/groups/")
+        
+        ' If it's a group library item (contains "/groups/")
+        If groupPos > 0 And InStr(1, jsonText, "/groups/" & key) = 0 Then
+            ' Extract group ID
+            Dim groupStart As Long, groupEnd As Long
+            groupStart = groupPos + Len("/groups/")
+            groupEnd = InStr(groupStart, jsonText, "/")
+            If groupEnd > groupStart Then
+                Dim groupID As String
+                groupID = Mid$(jsonText, groupStart, groupEnd - groupStart)
+                zoteroLink = "zotero://select/groups/" & groupID & "/items/" & key
+            Else
+                ' Default to personal library if group ID can't be extracted
+                zoteroLink = "zotero://select/library/items/" & key
+            End If
+        Else
+            ' Personal library item
+            zoteroLink = "zotero://select/library/items/" & key
+        End If
+        
+        ' Open the Zotero link using ShellExecute
+        Dim shellObj As Object
+        Set shellObj = CreateObject("Shell.Application")
+        shellObj.ShellExecute zoteroLink, "", "", "open", 1
+    Next i
+    
+    ' Confirm to user
+    If itemKeys.Count = 1 Then
+        MsgBox "Zotero item opened in Zotero library.", vbInformation, "Zotero"
+    Else
+        MsgBox itemKeys.Count & " Zotero items opened in Zotero library.", vbInformation, "Zotero"
+    End If
+End Sub
+
