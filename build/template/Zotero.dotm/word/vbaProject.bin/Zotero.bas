@@ -262,7 +262,7 @@ Public Sub ZoteroGoToZotero()
     Set zoteroField = Nothing
     Dim fld As Field
     For Each fld In Selection.Fields
-        If InStr(1, fld.Code.Text, "ZOTERO_ITEM") > 0 Then
+        If InStr(1, fld.Code.text, "ZOTERO_ITEM") > 0 Then
             Set zoteroField = fld
             Exit For
         End If
@@ -275,7 +275,7 @@ Public Sub ZoteroGoToZotero()
 
     ' Get field code text (the JSON)
     Dim fieldCode As String
-    fieldCode = zoteroField.Code.Text
+    fieldCode = zoteroField.Code.text
     
     ' The JSON is enclosed in braces; find the JSON content
     Dim jsonStart As Long, jsonEnd As Long
@@ -317,14 +317,22 @@ Public Sub ZoteroGoToZotero()
         If IsEmpty(selectionResult) Then Exit Sub
         
         ' Process selected items
-        Dim selectedIndexes As Variant
-        selectedIndexes = selectionResult
-        
-        ' Convert selected indexes to keys
-        Dim idx As Variant
-        For Each idx In selectedIndexes
-            selectedKeys.Add itemKeys(CInt(idx))
-        Next
+        ' Handle both array and Collection return types
+        If IsArray(selectionResult) Then
+            ' Handle array return (from SimpleItemSelection)
+            Dim i As Long
+            For i = LBound(selectionResult) To UBound(selectionResult)
+                Dim indexValue As Integer
+                indexValue = selectionResult(i)
+                selectedKeys.Add itemKeys(indexValue)
+            Next i
+        Else
+            ' Handle Collection return (from UserForm selection)
+            Dim idx As Variant
+            For Each idx In selectionResult
+                selectedKeys.Add itemKeys(CInt(idx))
+            Next
+        End If
     Else
         ' Single item - no dialog needed
         selectedKeys.Add itemKeys(1)
@@ -635,14 +643,32 @@ Private Function ShowItemSelectionDialog(itemKeys As Collection, displayNames As
         
         ' Process results if OK was clicked
         If .DialogResult = vbOK Then
-            Dim selectedIndexes As New Collection
+            ' Count selected items first
+            Dim selectedCount As Integer
+            selectedCount = 0
             For i = 0 To .lstItems.ListCount - 1
                 If .lstItems.Selected(i) Then
-                    selectedIndexes.Add i + 1 ' Make 1-based
+                    selectedCount = selectedCount + 1
                 End If
             Next i
             
-            ShowItemSelectionDialog = selectedIndexes
+            ' Create array with selected indexes
+            If selectedCount > 0 Then
+                Dim selectedArr() As Integer
+                ReDim selectedArr(1 To selectedCount)
+                Dim arrIndex As Integer
+                arrIndex = 1
+                For i = 0 To .lstItems.ListCount - 1
+                    If .lstItems.Selected(i) Then
+                        selectedArr(arrIndex) = i + 1 ' Make 1-based
+                        arrIndex = arrIndex + 1
+                    End If
+                Next i
+                ShowItemSelectionDialog = selectedArr
+            Else
+                ' Nothing selected
+                ShowItemSelectionDialog = Empty
+            End If
         Else
             ' User canceled
             ShowItemSelectionDialog = Empty
@@ -677,47 +703,57 @@ Private Function SimpleItemSelection(itemKeys As Collection, displayNames As Col
         Exit Function
     End If
     
+    ' Create array instead of Collection for more reliable return value
+    Dim selectedArr() As Integer
+    Dim selectedCount As Integer
+    selectedCount = 0
+    
     ' Process selection
-    Dim selectedIndexes As New Collection
     If LCase(Trim(userInput)) = "all" Then
         ' All items selected
+        ReDim selectedArr(1 To itemKeys.Count)
         For i = 1 To itemKeys.Count
-            On Error Resume Next
-            selectedIndexes.Add i, CStr(i)
-            On Error GoTo 0
+            selectedArr(i) = i
+            selectedCount = selectedCount + 1
         Next i
-        
-        ' Debug check - ensure we have items
-        If selectedIndexes.Count = 0 Then
-            MsgBox "Warning: Failed to select all items. Using manual selection.", vbExclamation
-            ' Manually add each item as fallback
-            For i = 1 To itemKeys.Count
-                selectedIndexes.Add i
-            Next i
-        End If
     Else
-        ' Parse numbers
+        ' Parse numbers - first count how many valid selections we have
         Dim parts As Variant
         parts = Split(userInput, ",")
+        Dim validCount As Integer
+        validCount = 0
         
         Dim part As Variant
         For Each part In parts
             Dim num As Long
             num = Val(Trim(part))
             If num >= 1 And num <= itemKeys.Count Then
-                On Error Resume Next
-                selectedIndexes.Add num, CStr(num)
-                On Error GoTo 0
+                validCount = validCount + 1
             End If
         Next part
+        
+        ' Now create the array with the right size
+        If validCount > 0 Then
+            ReDim selectedArr(1 To validCount)
+            selectedCount = 0
+            ' Fill the array
+            For Each part In parts
+                num = Val(Trim(part))
+                If num >= 1 And num <= itemKeys.Count Then
+                    selectedCount = selectedCount + 1
+                    selectedArr(selectedCount) = num
+                End If
+            Next part
+        End If
     End If
     
     ' Check if any items were selected
-    If selectedIndexes.Count = 0 Then
+    If selectedCount = 0 Then
         MsgBox "No valid items were selected. Operation canceled.", vbInformation, "Zotero"
         SimpleItemSelection = Empty
     Else
-        SimpleItemSelection = selectedIndexes
+        ' Return the array directly
+        SimpleItemSelection = selectedArr
     End If
 End Function
 
@@ -748,7 +784,7 @@ Private Sub OpenItemsInZotero(selectedKeys As Collection, groupIDs As Collection
         Set shellObj = CreateObject("Shell.Application")
         shellObj.ShellExecute zoteroLink, "", "", "open", 1
         
-        MsgBox "Zotero item opened in Zotero library.", vbInformation, zoteroLink
+        ' MsgBox "Zotero item opened in Zotero library.", vbInformation, zoteroLink
     Else
         ' Multiple items - use item list in query parameter
         ' Group items by library (personal vs. each group)
@@ -813,7 +849,6 @@ Private Sub OpenItemsInZotero(selectedKeys As Collection, groupIDs As Collection
             Next g
         End If
         
-        MsgBox selectedKeys.Count & " Zotero items opened in Zotero library.", vbInformation, "Zotero"
+        ' MsgBox selectedKeys.Count & " Zotero items opened in Zotero library.", vbInformation, zoteroLink
     End If
 End Sub
-
