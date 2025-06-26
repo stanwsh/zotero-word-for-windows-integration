@@ -324,7 +324,9 @@ Public Sub ZoteroGoToZotero()
             For i = LBound(selectionResult) To UBound(selectionResult)
                 Dim indexValue As Integer
                 indexValue = selectionResult(i)
-                selectedKeys.Add itemKeys(indexValue)
+                If indexValue >= 1 And indexValue <= itemKeys.Count Then
+                    selectedKeys.Add itemKeys(indexValue)
+                End If
             Next i
         Else
             ' Handle Collection return (from UserForm selection)
@@ -614,36 +616,44 @@ End Sub
 
 ' Show a dialog for the user to select items
 Private Function ShowItemSelectionDialog(itemKeys As Collection, displayNames As Collection) As Variant
-    ' Create UserForm for selection
-    Dim frmSelItems As Object
+    ' Try to create the UserForm
+    Dim frm As Object
+    
     On Error Resume Next
-    Set frmSelItems = UserForms.Add("frmZoteroSelectItems")
+    ' Use CreateObject rather than UserForms.Add for better reliability
+    Set frm = UserForms.Add("frmZoteroSelectItems")
     
     If Err.Number <> 0 Then
         ' UserForm approach failed, fallback to simplified selection approach
+        Debug.Print "UserForm not available. Error: " & Err.Description & " (" & Err.Number & ")"
         ShowItemSelectionDialog = SimpleItemSelection(itemKeys, displayNames)
         Exit Function
     End If
     On Error GoTo 0
     
-    ' Populate the form with items
-    With frmSelItems
-        ' Setup form controls (UserForm would need a ListBox named lstItems)
-        .Caption = "Select items to open in Zotero"
+    ' Configure the form
+    With frm
+        ' Set caption
+        .Caption = "Select Zotero Items to Open"
+        
+        ' Resize form appropriately
+        .Width = 400
+        .Height = 300
         
         ' Add items to the list
         Dim i As Long
         For i = 1 To itemKeys.Count
             .lstItems.AddItem displayNames(i)
-            .lstItems.Selected(i - 1) = True ' Select by default
+            ' Select all items by default
+            .lstItems.Selected(i - 1) = True
         Next i
         
-        ' Show the form
+        ' Show the form modally
         .Show vbModal
         
-        ' Process results if OK was clicked
+        ' Process results based on DialogResult
         If .DialogResult = vbOK Then
-            ' Count selected items first
+            ' Count selected items
             Dim selectedCount As Integer
             selectedCount = 0
             For i = 0 To .lstItems.ListCount - 1
@@ -656,17 +666,21 @@ Private Function ShowItemSelectionDialog(itemKeys As Collection, displayNames As
             If selectedCount > 0 Then
                 Dim selectedArr() As Integer
                 ReDim selectedArr(1 To selectedCount)
+                
                 Dim arrIndex As Integer
                 arrIndex = 1
+                
                 For i = 0 To .lstItems.ListCount - 1
                     If .lstItems.Selected(i) Then
                         selectedArr(arrIndex) = i + 1 ' Make 1-based
                         arrIndex = arrIndex + 1
                     End If
                 Next i
+                
                 ShowItemSelectionDialog = selectedArr
             Else
-                ' Nothing selected
+                ' No items selected
+                MsgBox "No items were selected. Operation canceled.", vbInformation, "Zotero"
                 ShowItemSelectionDialog = Empty
             End If
         Else
@@ -676,7 +690,8 @@ Private Function ShowItemSelectionDialog(itemKeys As Collection, displayNames As
     End With
     
     ' Clean up
-    Unload frmSelItems
+    Unload frm
+    Set frm = Nothing
 End Function
 
 ' Simple item selection when UserForms are not available
