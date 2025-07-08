@@ -19,6 +19,9 @@ Attribute VB_Name = "ZoteroRibbon"
 ' You should have received a copy of the GNU General Public License
 ' along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '
+' Additional modifications copyright (c) 2025 stanwsh
+' SPDX-License-Identifier: AGPL-3.0-only
+'
 ' ***** END LICENSE BLOCK *****
 
 Option Explicit

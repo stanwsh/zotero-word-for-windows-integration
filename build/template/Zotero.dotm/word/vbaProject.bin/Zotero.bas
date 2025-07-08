@@ -19,7 +19,10 @@ Attribute VB_Name = "Zotero"
 ' You should have received a copy of the GNU General Public License
 ' along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '
-' ***** END LICENSE BLOCK *****
+' Additional modifications copyright (c) 2025 stanwsh
+' SPDX-License-Identifier: AGPL-3.0-only
+'
+' ***** END ADDITIONAL LICENSE BLOCK *****
 
 Option Explicit
 
@@ -253,20 +256,43 @@ End Sub
 
 Public Sub ZoteroGoToZotero()
     ' Check if the selection is in a valid Zotero citation field
-    If Selection.Fields.Count = 0 Then
-        MsgBox "Please place the cursor inside a Zotero citation to use Go To Zotero.", vbInformation, "Zotero"
-        Exit Sub
-    End If
+    ' If Selection.Fields.Count = 0 Then
+    '     MsgBox "Please place the cursor inside a Zotero citation to use Go To Zotero.", vbInformation, "Zotero"
+    '     Exit Sub
+    ' End If
 
     Dim zoteroField As Field
     Set zoteroField = Nothing
+
+    Dim rng as Range
+    Set rng = Selection.Range
+
+    ' Step 1: First check all fields in the selection
+    Debug.Print "Selection.Range.Start: " & Selection.Range.Start & ", End: " & Selection.Range.End
+
     Dim fld As Field
-    For Each fld In Selection.Fields
-        If InStr(1, fld.Code.text, "ZOTERO_ITEM") > 0 Then
-            Set zoteroField = fld
-            Exit For
+    For Each fld In ActiveDocument.Fields
+        If fld.Type = wdFieldAddin Then ' Most Zotero fields are Addin fields
+            ' Check if the cursor is inside the field code or result
+            If rng.Start >= fld.Code.Start And rng.End <= fld.Result.End Then
+                If InStr(1, fld.Code.Text, "ZOTERO_ITEM") > 0 Then
+                    Set zoteroField = fld
+                    Debug.Print " This is a Zotero field."
+                    Exit For
+                End If
+            End If
         End If
     Next
+
+    ' Step 2: If still nothing, try original selection-based method (just in case)
+    If zoteroField Is Nothing And Selection.Fields.Count > 0 Then
+        For Each fld In Selection.Fields
+            If InStr(1, fld.Code.Text, "ZOTERO_ITEM") > 0 Then
+                Set zoteroField = fld
+                Exit For
+            End If
+        Next
+    End If
 
     If zoteroField Is Nothing Then
         MsgBox "Please place the cursor in a Zotero citation before using Go To Zotero.", vbExclamation, "Zotero"
@@ -596,7 +622,7 @@ Private Sub ExtractItemData(itemJson As String, ByRef itemKey As String, ByRef d
                 displayName = displayName & " (" & year & ")"
             End If
             If title <> "" Then
-                displayName = displayName & " — " & title
+                displayName = displayName & " - " & title
             End If
         ElseIf title <> "" Then
             displayName = title
@@ -865,5 +891,20 @@ Private Sub OpenItemsInZotero(selectedKeys As Collection, groupIDs As Collection
         End If
         
         ' MsgBox selectedKeys.Count & " Zotero items opened in Zotero library.", vbInformation, zoteroLink
+    End If
+End Sub
+
+Private Sub OpenZoteroUrl(zoteroLink As String)
+    ' Cross-platform: open zotero:// link on Windows or macOS
+    If InStr(1, Application.OperatingSystem, "Macintosh", vbTextCompare) > 0 Then
+        ' For macOS, use Shell to call open (works in modern Office for Mac)
+        On Error Resume Next
+        Shell "open '" & zoteroLink & "'", vbNormalFocus
+        On Error GoTo 0
+    Else
+        ' Windows
+        Dim shellObj As Object
+        Set shellObj = CreateObject("Shell.Application")
+        shellObj.ShellExecute zoteroLink, "", "", "open", 1
     End If
 End Sub

@@ -2,6 +2,10 @@
 
 This document provides detailed instructions for creating the "Select Zotero Items" UserForm used in the Go To Zotero feature. This form allows users to select which Zotero items they want to open when clicking on a citation that contains multiple references.
 
+## Disclaimer
+
+Zotero and the Zotero logo are registered trademarks of the Corporation for Digital Scholarship. Use of the name and logo here does not imply endorsement.
+
 ## Creating the UserForm
 
 1. Open Word and load the Zotero template (Zotero.dotm)

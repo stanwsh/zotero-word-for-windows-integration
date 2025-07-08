@@ -1,48 +1,107 @@
 # Zotero Word for Windows Integration
 
-This is a Firefox add-on that consists of a library written in C++ that communicates with Microsoft Word out of process using OLE Automation, a js-ctypes wrapper for said library, and a template that is installed into Microsoft Word to communicate with Zotero.
+This repository provides advanced Microsoft Word integration for Zotero, focusing exclusively on the VBA macro code and Word template (dotm) components. It enables citation, bibliography, and reference management directly within Word, with a modern ribbon UI and custom macros (`GoToZotero`).
 
-## C++ Library Build Requirements
-- Visual Studio (currently 2017)
-- Windows XP C++ libraries (install in VS by right-clicking the project and selecting "Install Missing Features")
-- Microsoft Office (previously build with 2010, but newer versions should work)
+## Legal & Trademark Notice
 
-## To Build the C++ Library
-- Open `build/zoteroWinWordIntegration/zoteroWinWordIntegration.sln`
-- Change `imports.h `to point to the appropriate files (may be in different places with newer Office)
-- Set to Release configuration in the dropdown in the toolbar
-- Set to Win32 target in dropdown to the right of Release dropdown
-- Build->Build Solution
-- Set to x64 target in dropdown
-- Build->Build Solution
+Zotero and the Zotero logo are registered trademarks of the Corporation for Digital Scholarship. Use of the name and logo in this project is solely for the purpose of indicating compatibility. This project is not affiliated with or endorsed by Zotero or the Corporation for Digital Scholarship.
+
+All original icons or modified graphics in this project that reference Zotero use the official Zotero icon **unmodified**, in accordance with Zotero’s [trademark policy](https://www.zotero.org/support/trademark_policy), and are used strictly for descriptive, nominative purposes.
+
+## Features
+
+- **Go To Zotero**: Instantly navigate from a Word citation to the corresponding Zotero item(s) in your Zotero library, using the `zotero://` protocol. Supports both single and multi-reference citations with a user-friendly selection dialog.
+- **Modern Ribbon UI**: Redesigned ribbon layout and icons, with groups for Citations, Bibliography, and Tools, inspired by EndNote for a familiar experience.
+- **Multi-reference Support**: When a citation contains multiple references, a selection interface allows you to open one or more items in Zotero.
+- **UserForm Selection Dialog**: A modern, resizable dialog for selecting items, with Select All and Clear All options. See the build guide below.
+- **Compatibility**: Built and tested on Word 2010.
+- Original Features:
+  - **Add/Edit Citations**: Insert or edit citations at the current cursor position in Word.
+  - **Add/Edit Bibliography**: Insert or update a bibliography in your document.
+  - **Insert Note**: Add notes linked to your references.
+  - **Unlink Citations**: Remove all Zotero field codes and unlink from the Zotero library.
+  - **Document Preferences**: Change citation style or locale.
+  - **Refresh Citations**: Update all citations to reflect changes in your Zotero library.
+
+## Installation
+
+Replace the existing `Zotero.dotm` file in your Word startup folder with the one from this repository. For example, the default location for the Word startup folder is:
+
+- **Windows**: `%APPDATA%\Microsoft\Word\STARTUP`
+- **MacOS**: `~/Library/Group Containers/UBF8T346G9.Office/User Content.localized/Startup.localized/Word`
+
+## Build and Test Environment
+
+- The file `Zotero.dotm` is compiled under **Microsoft Office Word 2010 14.0.4760.1000 (32-bit)**
+- Tested on:
+  - Windows XP (32-bit)
+    - Compile environment (Word 2010 32-bit)
+    - Zotero 5.0.77
+  - Windows 10/11 (64-bit)
+    - Word for Microsoft 365 MSO 2506 Build 16.0.18925.20076 (64-bit)
+    - Zotero 7.0.16
+  
+- `UserForm` Selection Dialog Not supported:
+  - MacOS Sonoma (14.6.1)
+    - Microsoft Word for Mac 16.78.23100802
+    - Zotero 7.0.18 (Latest)
+
+## Known Issues
+
+- The multi-reference selection dialog may only display items that belong to the first field code in the document when multiple field codes are selected.
+- The add-in does not currently support `UserForm` Dialog for MacOS versions of Word, fallback to the `InputBox` method.
+- The `Go To Zotero` feature may not work correctly if the Zotero item has been deleted or moved.
+
+## Upstream C++ Source Reference
+
+This repository includes VBA code modifications only. However, the Microsoft Word add-ins are designed to work with the original C++ integration code, which is responsible for the communication between Zotero and Word.
+
+The original C++ integration code (not maintained here) is available from the [upstream Zotero repository](https://github.com/zotero/zotero-word-for-windows-integration).  
+If you require the C++ component (such as `zoteroWinWordIntegration.cpp`), please refer to the [original source file](https://github.com/zotero/zotero-word-for-windows-integration/blob/master/build/zoteroWinWordIntegration/zoteroWinWordIntegration.cpp).
+
+**Note:**  
+This repository does not track or update the C++ integration code. For the latest version, bug fixes, or to build from source, always consult the official Zotero repository.
+
+If you copy any files from the upstream project, please ensure you respect the original licensing and include a reference to the original commit/version.
 
 ## Template Build Requirements
-- Templates should be built with the oldest version of Word to be supported. Otherwise older versions of Word may fail to function properly. This is currently:
+
+- Templates should be built with the oldest version of Word to be supported. Otherwise, older versions of Word may fail to function properly. This is currently:
   - Word 2007 (for the ribbonized dotm template)
   - Word 2003 (for the old dot template)
 
 ## To Modify/Build the Templates
+
 - Open the template from inside Microsoft Word
-- Go to View->Macros->View Macros (Ribbonized Word) or Tools->Macros->View Macros (Word 2003) and click "Edit" for one of the Zotero macros
+- Go to View -> Macros -> View Macros (Ribbonized Word) or Tools -> Macros -> View Macros (Word 2003) and click "Edit" for one of the Zotero macros
 - Edit/replace code as desired
-- Go to Debug->Compile Project to ensure there are no code errors
+- Go to Debug -> Compile Project to ensure there are no code errors
+
+## To Unpack the Template
+
 - Run `build/template/unpack_templates.sh`
+- Prerequisites: `libxml2`, `unzip`
+
+## UserForm Build Guide
+
+To enable the multi-reference selection dialog, follow the instructions in [`build/template/Zotero.dotm/word/UserForm_Creation_Guide.md`](build/template/Zotero.dotm/word/UserForm_Creation_Guide.md) to create and configure the required UserForm in the template.
 
 ## Development Starter's Guide
 
-Start by opening the dotm/dot template in Word. Word templates have support for custom macros 
-and adding UI elements to call the macros, which is how the extension is implemented on Word. 
-RibbonUI can be edited by extracting the dotm file or using the [Custom UI editor](http://openxmldeveloper.org/blog/b/openxmldeveloper/archive/2009/08/06/7293.aspx). 
-To edit the .dot template UI Word for Windows 2003 is needed. 
-In VBA macro code you will find that [SendMessage](https://msdn.microsoft.com/en-us/library/windows/desktop/ms644950(v=vs.85).aspx)
-protocol is used to issue commands to Zotero process from Word. These commands are received in [zotero-service.js](https://github.com/zotero/zotero/blob/eaf8d3696359dcea0edaa2fd9bc1e4cf5d985014/components/zotero-service.js#L516-L516)
-where they are passed to integration.js.
+Start by opening the dotm/dot template in Word. Word templates support custom macros and UI elements to call the macros, which is how the extension is implemented. The Ribbon UI can be edited by extracting the dotm file or using the [Custom UI editor](http://openxmldeveloper.org/blog/b/openxmldeveloper/archive/2009/08/06/7293.aspx). To edit the .dot template UI, Word for Windows 2003 is needed (no longer supported).
 
-Zotero talks to Word via [js-ctype bindings](https://github.com/zotero/zotero-word-for-windows-integration/blob/4f07be4bfaa3f37897a5af5371ea20353214f23e/components/zoteroWinWordIntegration.js#L52-L52)
-to a C++ OLE Automation based [library](https://github.com/zotero/zotero-word-for-windows-integration/blob/8d1807584d02f3b10715dd9895413c04349d45e8/build/zoteroWinWordIntegration/zoteroWinWordIntegration.h).
-To generate new interfaces for Word interop communications you should use the Add New Class wizard in
-Visual Studio and select 'MFC Class from Typelib'. The interop API docs can be found in the [MSDN](https://docs.microsoft.com/en-us/dotnet/api/microsoft.office.interop.word._document?view=word-pia).
-The plugin should technically work with Word versions starting with 2003, but we have stopped supporting everything below Word 2010
-due to impossible to fix bugs cropping up as time goes on and Microsoft drops compatibility themselves.
-Some API calls are on a deprecation path, so we may be inevitably be forced to move 
-away or split the library into multiple DLLs.
+In VBA macro code, [SendMessage](https://msdn.microsoft.com/en-us/library/windows/desktop/ms644950(v=vs.85).aspx) is used to issue commands to the Zotero process from Word. These commands are received in [zotero-service.js](https://github.com/zotero/zotero/blob/eaf8d3696359dcea0edaa2fd9bc1e4cf5d985014/components/zotero-service.js#L516-L516) and passed to integration.js.
+
+Zotero talks to Word via [js-ctype bindings](https://github.com/zotero/zotero-word-for-windows-integration/blob/4f07be4bfaa3f37897a5af5371ea20353214f23e/components/zoteroWinWordIntegration.js#L52-L52) to a C++ OLE Automation based [library](https://github.com/zotero/zotero-word-for-windows-integration/blob/8d1807584d02f3b10715dd9895413c04349d45e8/build/zoteroWinWordIntegration/zoteroWinWordIntegration.h). To generate new interfaces for Word interop communications, use the Add New Class wizard in Visual Studio and select 'MFC Class from Typelib'. The interop API docs can be found in the [MSDN](https://docs.microsoft.com/en-us/dotnet/api/microsoft.office.interop.word._document?view=word-pia).
+
+The plugin should technically work with Word versions starting with 2003, but support for versions below Word 2010 has ended due to unfixable bugs and Microsoft's own compatibility changes. Some API calls are on a deprecation path, so future changes may require splitting the library into multiple DLLs.
+
+## Credits
+
+- Original Zotero Word for Windows Integration by the Zotero team and contributors
+- Major enhancements, ribbon redesign, and Go To Zotero feature by stanwsh (2025)
+- Modern icon set and UI improvements by stanwsh (2025)
+
+**Note:** The Zotero icon is © Corporation for Digital Scholarship and used here under the terms of the AGPL and Zotero’s trademark policy for nominative, unmodified use. All other icons and graphics in this project are licensed under the terms stated in the `NOTICE.txt`.
+
+---
