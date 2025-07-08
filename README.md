@@ -1,20 +1,26 @@
-# Zotero Word for Windows Integration
+# Zotero Word Integration
 
-This repository provides advanced Microsoft Word integration for Zotero, focusing exclusively on the VBA macro code and Word template (dotm) components. It enables citation, bibliography, and reference management directly within Word, with a modern ribbon UI and custom macros (`GoToZotero`).
+This repository provides advanced Microsoft Word integration for Zotero, focusing exclusively on the VBA macro code and Word template (dotm) components. It enables citation, bibliography, and reference management directly within Word, with a modern ribbon UI and custom macros.
+
+## Cross-Platform Support
+
+This release includes separate templates optimized for:
+- **Windows**: Full-featured with UserForm dialog for multi-reference selection
+- **macOS**: Compatible version with text-based reference selection
 
 ## Legal & Trademark Notice
 
 Zotero and the Zotero logo are registered trademarks of the Corporation for Digital Scholarship. Use of the name and logo in this project is solely for the purpose of indicating compatibility. This project is not affiliated with or endorsed by Zotero or the Corporation for Digital Scholarship.
 
-All original icons or modified graphics in this project that reference Zotero use the official Zotero icon **unmodified**, in accordance with Zotero’s [trademark policy](https://www.zotero.org/support/trademark_policy), and are used strictly for descriptive, nominative purposes.
+All original icons or modified graphics in this project that reference Zotero use the official Zotero icon **unmodified**, in accordance with Zotero's [trademark policy](https://www.zotero.org/support/trademark_policy), and are used strictly for descriptive, nominative purposes.
 
 ## Features
 
 - **Go To Zotero**: Instantly navigate from a Word citation to the corresponding Zotero item(s) in your Zotero library, using the `zotero://` protocol. Supports both single and multi-reference citations with a user-friendly selection dialog.
 - **Modern Ribbon UI**: Redesigned ribbon layout and icons, with groups for Citations, Bibliography, and Tools, inspired by EndNote for a familiar experience.
 - **Multi-reference Support**: When a citation contains multiple references, a selection interface allows you to open one or more items in Zotero.
-- **UserForm Selection Dialog**: A modern, resizable dialog for selecting items, with Select All and Clear All options. See the build guide below.
-- **Compatibility**: Built and tested on Word 2010.
+- **UserForm Selection Dialog**: A modern, resizable dialog for selecting items, with Select All and Clear All options. See the build guide below. (Windows only)
+- **Compatibility**: Built and tested on Word 2010 and later.
 - Original Features:
   - **Add/Edit Citations**: Insert or edit citations at the current cursor position in Word.
   - **Add/Edit Bibliography**: Insert or update a bibliography in your document.
@@ -25,32 +31,57 @@ All original icons or modified graphics in this project that reference Zotero us
 
 ## Installation
 
-Replace the existing `Zotero.dotm` file in your Word startup folder with the one from this repository. For example, the default location for the Word startup folder is:
+### Step 1: Choose the Right Template
+- For **Windows**: Use `Zotero.dotm` from the `install` folder
+- For **macOS**: Use `Zotero.dotm` from the `install/mac` folder
 
-- **Windows**: `%APPDATA%\Microsoft\Word\STARTUP`
-- **MacOS**: `~/Library/Group Containers/UBF8T346G9.Office/User Content.localized/Startup.localized/Word`
+### Step 2: Install the Template
+
+Replace the existing `Zotero.dotm` file in your Word startup folder with the appropriate version from this repository.
+
+**Windows Installation:**
+1. Close Word completely
+2. Navigate to `%APPDATA%\Microsoft\Word\STARTUP`
+3. Backup the existing `Zotero.dotm` if present
+4. Copy the new `Zotero.dotm` file from this repository to the STARTUP folder
+5. Start Word and verify that the Zotero tab appears with the new "Go To Zotero" button
+
+**macOS Installation:**
+1. Close Word completely
+2. Navigate to `~/Library/Group Containers/UBF8T346G9.Office/User Content.localized/Startup.localized/Word`
+   - If you can't find this path, open Finder, press Cmd+Shift+G, and paste the path
+3. Backup the existing `Zotero.dotm` if present
+4. Copy the `Zotero.dotm` file from the `install/mac` folder in this repository to the Word Startup folder
+5. Start Word and verify that the Zotero tab appears with the new "Go To Zotero" button
+
+### Step 3: Test the Installation
+
+1. Create a new document in Word
+2. Add a Zotero citation using the Add/Edit Citation button
+3. Place your cursor within the citation
+4. Click the "Go To Zotero" button in the ribbon
+5. Verify that Zotero opens and displays the cited item(s)
 
 ## Build and Test Environment
 
-- The file `Zotero.dotm` is compiled under **Microsoft Office Word 2010 14.0.4760.1000 (32-bit)**
+- The Windows template was compiled under **Microsoft Office Word 2010 14.0.4760.1000 (32-bit)**
+- The macOS template was tested on **Word for Mac 16.78.23100802**
 - Tested on:
   - Windows XP (32-bit)
     - Compile environment (Word 2010 32-bit)
     - Zotero 5.0.77
   - Windows 10/11 (64-bit)
     - Word for Microsoft 365 MSO 2506 Build 16.0.18925.20076 (64-bit)
-    - Zotero 7.0.16
-  
-- `UserForm` Selection Dialog Not supported:
-  - MacOS Sonoma (14.6.1)
+    - Zotero 7.0.16 (Latest)
+  - macOS Sonoma (14.6.1)
     - Microsoft Word for Mac 16.78.23100802
     - Zotero 7.0.18 (Latest)
 
 ## Known Issues
 
-- The multi-reference selection dialog may only display items that belong to the first field code in the document when multiple field codes are selected.
-- The add-in does not currently support `UserForm` Dialog for MacOS versions of Word, fallback to the `InputBox` method.
-- The `Go To Zotero` feature may not work correctly if the Zotero item has been deleted or moved.
+- On macOS, the multi-reference selection uses a text-based interface instead of a graphical UserForm dialog
+- The multi-reference selection dialog may only display items that belong to the first field code in the document when multiple field codes are selected
+- The `Go To Zotero` feature may not work correctly if the Zotero item has been deleted or moved
 
 ## Upstream C++ Source Reference
 
@@ -84,7 +115,7 @@ If you copy any files from the upstream project, please ensure you respect the o
 
 ## UserForm Build Guide
 
-To enable the multi-reference selection dialog, follow the instructions in [`build/template/Zotero.dotm/word/UserForm_Creation_Guide.md`](build/template/Zotero.dotm/word/UserForm_Creation_Guide.md) to create and configure the required UserForm in the template.
+To enable the multi-reference selection dialog (Windows only), follow the instructions in [`build/template/Zotero.dotm/word/UserForm_Creation_Guide.md`](build/template/Zotero.dotm/word/UserForm_Creation_Guide.md) to create and configure the required UserForm in the template.
 
 ## Development Starter's Guide
 
@@ -102,6 +133,6 @@ The plugin should technically work with Word versions starting with 2003, but su
 - Major enhancements, ribbon redesign, and Go To Zotero feature by stanwsh (2025)
 - Modern icon set and UI improvements by stanwsh (2025)
 
-**Note:** The Zotero icon is © Corporation for Digital Scholarship and used here under the terms of the AGPL and Zotero’s trademark policy for nominative, unmodified use. All other icons and graphics in this project are licensed under the terms stated in the `NOTICE.txt`.
+**Note:** The Zotero icon is © Corporation for Digital Scholarship and used here under the terms of the AGPL and Zotero's trademark policy for nominative, unmodified use. All other icons and graphics in this project are licensed under the terms stated in the `NOTICE.txt`.
 
 ---
