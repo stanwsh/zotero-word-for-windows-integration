@@ -65,15 +65,14 @@ Replace the existing `Zotero.dotm` file in your Word startup folder with the app
 ## Build and Test Environment
 
 - The Windows template was compiled under **Microsoft Office Word 2010 14.0.4760.1000 (32-bit)**
-- The macOS template was tested on **Word for Mac 16.78.23100802**
-- Tested on:
-  - Windows XP (32-bit)
+  - Tested on Windows XP (32-bit)
     - Compile environment (Word 2010 32-bit)
     - Zotero 5.0.77
-  - Windows 10/11 (64-bit)
+  - Tested on Windows 10/11 (64-bit)
     - Word for Microsoft 365 MSO 2506 Build 16.0.18925.20076 (64-bit)
     - Zotero 7.0.16 (Latest)
-  - macOS Sonoma (14.6.1)
+- The macOS template was compiled and tested on **Word for Mac 16.78.23100802**
+  - Tested on macOS Sonoma (14.6.1)
     - Microsoft Word for Mac 16.78.23100802
     - Zotero 7.0.18 (Latest)
 
