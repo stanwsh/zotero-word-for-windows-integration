@@ -1,6 +1,6 @@
-# Zotero Word Integration
+# Zotero Word Add-on with Navigation Support
 
-This repository provides advanced Microsoft Word integration for Zotero, focusing exclusively on the VBA macro code and Word template (dotm) components. It enables citation, bibliography, and reference management directly within Word, with a modern ribbon UI and custom macros.
+This repository provides advanced Microsoft Word integration for Zotero, focusing exclusively on the VBA macro code and Word template (dotm) components. It enables citation, bibliography, and reference management directly within Word, with a modern ribbon UI and custom macros, including the "Go To Zotero" navigation feature.
 
 ## Cross-Platform Support
 
